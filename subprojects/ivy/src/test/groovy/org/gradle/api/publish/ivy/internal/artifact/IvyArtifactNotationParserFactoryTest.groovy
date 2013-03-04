@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-
-
-
-
-
 package org.gradle.api.publish.ivy.internal.artifact
+
 import org.gradle.api.Task
 import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.internal.file.FileResolver
 import org.gradle.api.internal.notations.api.NotationParser
 import org.gradle.api.publish.ivy.IvyArtifact
+import org.gradle.api.publish.ivy.internal.publisher.IvyPublicationIdentity
 import org.gradle.api.tasks.TaskDependency
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.internal.reflect.DirectInstantiator
@@ -52,7 +49,10 @@ public class IvyArtifactNotationParserFactoryTest extends Specification {
         def fileResolver = Stub(FileResolver) {
             asNotationParser() >> fileNotationParser
         }
-        parser = new IvyArtifactNotationParserFactory(instantiator, "1.2", fileResolver).create()
+        def identity = Stub(IvyPublicationIdentity) {
+            getModule() >> 'pub-name'
+        }
+        parser = new IvyArtifactNotationParserFactory(instantiator, fileResolver, identity).create()
     }
 
     def "directly returns IvyArtifact input"() {
@@ -68,7 +68,7 @@ public class IvyArtifactNotationParserFactoryTest extends Specification {
         def ivyArtifact = parser.parseNotation(publishArtifact)
 
         then:
-        ivyArtifact.name == publishArtifact.name
+        ivyArtifact.name == 'pub-name'
         ivyArtifact.extension == publishArtifact.extension
         ivyArtifact.type == publishArtifact.type
         ivyArtifact.file == publishArtifact.file
@@ -85,7 +85,7 @@ public class IvyArtifactNotationParserFactoryTest extends Specification {
         IvyArtifact ivyArtifact = parser.parseNotation(source: publishArtifact)
 
         then:
-        ivyArtifact.name == publishArtifact.name
+        ivyArtifact.name == 'pub-name'
         ivyArtifact.extension == publishArtifact.extension
         ivyArtifact.type == publishArtifact.type
         ivyArtifact.file == publishArtifact.file
@@ -108,7 +108,7 @@ public class IvyArtifactNotationParserFactoryTest extends Specification {
         fileNotationParser.parseNotation('some-file') >> file
 
         and:
-        ivyArtifact.name == "some-file"
+        ivyArtifact.name == 'pub-name'
         ivyArtifact.extension == "zip"
         ivyArtifact.type == "zip"
         ivyArtifact.file == file
@@ -142,8 +142,9 @@ public class IvyArtifactNotationParserFactoryTest extends Specification {
         IvyArtifact ivyArtifact = parser.parseNotation(archive)
 
         then:
-        ivyArtifact.name == "base-name"
+        ivyArtifact.name == 'pub-name'
         ivyArtifact.extension == "extension"
+        ivyArtifact.classifier == null
         ivyArtifact.file == archive.archivePath
         ivyArtifact.buildDependencies.getDependencies(null) == [archive] as Set
     }
@@ -159,16 +160,17 @@ public class IvyArtifactNotationParserFactoryTest extends Specification {
         fileNotationParser.parseNotation('some-file') >> file
 
         and:
-        ivyArtifact.name == name
+        ivyArtifact.name == 'pub-name'
         ivyArtifact.extension == extension
         ivyArtifact.type == type
+        ivyArtifact.classifier == null
         ivyArtifact.file == file
 
         where:
-        fileName                       | name        | extension | type
-        "some-file-1.2.zip"            | "some-file" | "zip"     | "zip"
-        "some-file"                    | "some-file" | null      | null
-        "some-file-1.2-classifier.zip" | "some-file" | "zip"     | "zip"
+        fileName                       | extension | type
+        "some-file-1.2.zip"            | "zip"     | "zip"
+        "some-file"                    | ""        | ""
+        "some-file-1.2-classifier.zip" | "zip"     | "zip"
     }
 
 }

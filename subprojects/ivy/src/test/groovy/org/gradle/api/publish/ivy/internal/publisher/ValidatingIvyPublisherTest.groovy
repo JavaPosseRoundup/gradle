@@ -15,11 +15,13 @@
  */
 
 package org.gradle.api.publish.ivy.internal.publisher
-import org.gradle.api.InvalidUserDataException
-import org.gradle.api.artifacts.repositories.IvyArtifactRepository
+import org.gradle.api.Action
+import org.gradle.api.XmlProvider
+import org.gradle.api.internal.artifacts.repositories.PublicationAwareRepository
+import org.gradle.api.publish.ivy.InvalidIvyPublicationException
 import org.gradle.api.publish.ivy.IvyArtifact
-import org.gradle.api.publish.ivy.internal.publication.DefaultIvyProjectIdentity
-import org.gradle.api.publish.ivy.internal.tasks.IvyDescriptorFileGenerator
+import org.gradle.api.publish.ivy.internal.artifact.DefaultIvyArtifact
+import org.gradle.api.publish.ivy.internal.publication.DefaultIvyPublicationIdentity
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import spock.lang.Shared
 import spock.lang.Specification
@@ -37,7 +39,26 @@ public class ValidatingIvyPublisherTest extends Specification {
         when:
         def projectIdentity = this.projectIdentity("the-group", "the-artifact", "the-version")
         def publication = new IvyNormalizedPublication("pub-name", projectIdentity, ivyFile("the-group", "the-artifact", "the-version"), emptySet())
-        def repository = Mock(IvyArtifactRepository)
+        def repository = Mock(PublicationAwareRepository)
+
+        and:
+        publisher.publish(publication, repository)
+
+        then:
+        delegate.publish(publication, repository)
+    }
+
+    def "does not attempt to resolve extended ivy descriptor when validating"() {
+        when:
+        def ivyFile = ivyFile("the-group", "the-artifact", "the-version", new Action<XmlProvider>() {
+            void execute(XmlProvider t) {
+                t.asNode().info[0].appendNode("extends", ["organisation": "parent-org", "module": "parent-module", "revision": "parent-revision"])
+            }
+        })
+
+        and:
+        def publication = new IvyNormalizedPublication("pub-name", projectIdentity("the-group", "the-artifact", "the-version"), ivyFile, emptySet())
+        def repository = Mock(PublicationAwareRepository)
 
         and:
         publisher.publish(publication, repository)
@@ -50,36 +71,39 @@ public class ValidatingIvyPublisherTest extends Specification {
         given:
         def projectIdentity = projectIdentity(group, name, version)
         def publication = new IvyNormalizedPublication("pub-name", projectIdentity, ivyFile(group, name, version), emptySet())
-        def repository = Mock(IvyArtifactRepository)
+        def repository = Mock(PublicationAwareRepository)
 
         when:
         publisher.publish(publication, repository)
 
         then:
-        def e = thrown InvalidUserDataException
+        def e = thrown InvalidIvyPublicationException
         e.message == "Invalid publication 'pub-name': $message."
 
         where:
-        group          | name     | version   | message
-        ""             | "module" | "version" | "organisation cannot be empty"
-        "organisation" | ""       | "version" | "module name cannot be empty"
-        "organisation" | "module" | ""        | "revision cannot be empty"
-        null           | "module" | "version" | "organisation cannot be empty"
-        "organisation" | null     | "version" | "module name cannot be empty"
-        "organisation" | "module" | null      | "revision cannot be empty"
+        group          | name       | version         | message
+        ""             | "module"   | "version"       | "organisation cannot be empty"
+        "organisation" | ""         | "version"       | "module name cannot be empty"
+        "organisation" | "module"   | ""              | "revision cannot be empty"
+        null           | "module"   | "version"       | "organisation cannot be null"
+        "organisation" | null       | "version"       | "module name cannot be null"
+        "organisation" | "module"   | null            | "revision cannot be null"
+        "org\t"        | "module"   | "version"       | "organisation cannot contain ISO control character '\\u0009'"
+        "organisation" | "module\n" | "version"       | "module name cannot contain ISO control character '\\u000a'"
+        "organisation" | "module"   | "version\u0085" | "revision cannot contain ISO control character '\\u0085'"
     }
 
     def "project coordinates must match ivy descriptor file"() {
         given:
         def projectIdentity = projectIdentity("org", "module", "version")
         def publication = new IvyNormalizedPublication("pub-name", projectIdentity, ivyFile(organisation, module, version), emptySet())
-        def repository = Mock(IvyArtifactRepository)
+        def repository = Mock(PublicationAwareRepository)
 
         when:
         publisher.publish(publication, repository)
 
         then:
-        def e = thrown InvalidUserDataException
+        def e = thrown InvalidIvyPublicationException
         e.message == "Invalid publication 'pub-name': $message"
 
         where:
@@ -87,6 +111,29 @@ public class ValidatingIvyPublisherTest extends Specification {
         "org-mod"    | "module"     | "version"     | "supplied organisation does not match ivy descriptor (cannot edit organisation directly in the ivy descriptor file)."
         "org"        | "module-mod" | "version"     | "supplied module name does not match ivy descriptor (cannot edit module name directly in the ivy descriptor file)."
         "org"        | "module"     | "version-mod" | "supplied revision does not match ivy descriptor (cannot edit revision directly in the ivy descriptor file)."
+    }
+
+    def "reports and fails with invalid descriptor file"() {
+        given:
+        IvyDescriptorFileGenerator ivyFileGenerator = new IvyDescriptorFileGenerator(new DefaultIvyPublicationIdentity("the-group", "the-artifact", "the-version"))
+        final artifact = new DefaultIvyArtifact(null, "name", "ext", "type", "classifier")
+        artifact.setConf("unknown")
+        ivyFileGenerator.addArtifact(artifact)
+
+        def ivyFile = testDir.file("ivy")
+        ivyFileGenerator.writeTo(ivyFile)
+
+        and:
+        def publication = new IvyNormalizedPublication("pub-name", projectIdentity("the-group", "the-artifact", "the-version"), ivyFile, emptySet())
+        def repository = Mock(PublicationAwareRepository)
+
+        when:
+        publisher.publish(publication, repository)
+
+        then:
+        def e = thrown InvalidIvyPublicationException
+        e.message.startsWith "Invalid publication 'pub-name': Problem occurred while parsing ivy file: " +
+                "Cannot add artifact 'name.ext(type)' to configuration 'unknown' of module the-group#the-artifact;the-version because this configuration doesn't exist!"
     }
 
     def "validates artifact attributes"() {
@@ -101,19 +148,24 @@ public class ValidatingIvyPublisherTest extends Specification {
         def publication = new IvyNormalizedPublication("pub-name", projectIdentity("org", "module", "version"), ivyFile("org", "module", "version"), toSet([ivyArtifact]))
 
         when:
-        publisher.publish(publication, Mock(IvyArtifactRepository))
+        publisher.publish(publication, Mock(PublicationAwareRepository))
 
         then:
-        def t = thrown InvalidUserDataException
-        t.message == "Invalid publication 'pub-name': artifact ${attribute} cannot be ${error}."
+        def t = thrown InvalidIvyPublicationException
+        t.message == "Invalid publication 'pub-name': artifact ${message}."
 
         where:
-        attribute |name       |type  | extension | classifier | error
-        "name" | null | "type" | "ext" | "classifier" | "empty"
-        "name" | "" | "type" | "ext" | "classifier" | "empty"
-        "type" | "name" | "" | "ext" | "classifier" | "an empty string. Use null instead"
-        "extension" | "name" | "type" | "" | "classifier" | "an empty string. Use null instead"
-        "classifier" | "name" | "type" | "ext" | "" | "an empty string. Use null instead"
+        name    | type    | extension | classifier   | message
+        null    | "type"  | "ext"     | "classifier" | "name cannot be null"
+        ""      | "type"  | "ext"     | "classifier" | "name cannot be empty"
+        "na/me" | "type"  | "ext"     | null         | "name cannot contain '/'"
+        "name"  | null    | "ext"     | "classifier" | "type cannot be null"
+        "name"  | ""      | "ext"     | "classifier" | "type cannot be empty"
+        "name"  | "ty/pe" | "ext"     | null         | "type cannot contain '/'"
+        "name"  | "type"  | null      | "classifier" | "extension cannot be null"
+        "name"  | "type"  | "ex/t"    | null         | "extension cannot contain '/'"
+        "name"  | "type"  | "ext"     | ""           | "classifier cannot be an empty string. Use null instead"
+        "name"  | "type"  | "ext"     | "class\\y"   | "classifier cannot contain '\\'"
     }
 
     @Unroll
@@ -122,16 +174,17 @@ public class ValidatingIvyPublisherTest extends Specification {
         def publication = new IvyNormalizedPublication("pub-name", projectIdentity("group", "artifact", "version"), ivyFile("group", "artifact", "version"), toSet([ivyArtifact]))
 
         when:
-        publisher.publish(publication, Mock(IvyArtifactRepository))
+        publisher.publish(publication, Mock(PublicationAwareRepository))
 
         then:
         ivyArtifact.name >> "name"
         ivyArtifact.type >> "type"
+        ivyArtifact.extension >> "ext"
         ivyArtifact.file >> theFile
 
         and:
-        def t = thrown InvalidUserDataException
-        t.message == "Cannot publish ivy publication 'pub-name': artifact file ${message}: '${theFile}'"
+        def t = thrown InvalidIvyPublicationException
+        t.message == "Invalid publication 'pub-name': artifact file ${message}: '${theFile}'"
 
         where:
         theFile                                                         | message
@@ -139,17 +192,67 @@ public class ValidatingIvyPublisherTest extends Specification {
         testDir.testDirectory.createDir('sub_directory')  | 'is a directory'
     }
 
+    def "cannot publish with duplicate artifacts"() {
+        given:
+        IvyArtifact artifact1 = Stub() {
+            getName() >> "name"
+            getExtension() >> "ext1"
+            getType() >> "type"
+            getClassifier() >> "classified"
+            getFile() >> testDir.createFile('artifact1')
+        }
+        IvyArtifact artifact2 = Stub() {
+            getName() >> "name"
+            getExtension() >> "ext1"
+            getType() >> "type"
+            getClassifier() >> "classified"
+            getFile() >> testDir.createFile('artifact2')
+        }
+        def projectIdentity = projectIdentity("org", "module", "revision")
+        def publication = new IvyNormalizedPublication("pub-name", projectIdentity, ivyFile("org", "module", "revision"), toSet([artifact1, artifact2]))
+
+        when:
+        publisher.publish(publication, Mock(PublicationAwareRepository))
+
+        then:
+        def t = thrown InvalidIvyPublicationException
+        t.message == "Invalid publication 'pub-name': multiple artifacts with the identical name, extension, type and classifier ('name', ext1', 'type', 'classified')."
+    }
+
+    def "cannot publish artifact with same attributes as ivy.xml"() {
+        given:
+        IvyArtifact artifact1 = Stub() {
+            getName() >> "ivy"
+            getExtension() >> "xml"
+            getType() >> "xml"
+            getClassifier() >> null
+            getFile() >> testDir.createFile('artifact1')
+        }
+        def projectIdentity = projectIdentity("org", "module", "revision")
+        def publication = new IvyNormalizedPublication("pub-name", projectIdentity, ivyFile("org", "module", "revision"), toSet([artifact1]))
+
+        when:
+        publisher.publish(publication, Mock(PublicationAwareRepository))
+
+        then:
+        def t = thrown InvalidIvyPublicationException
+        t.message == "Invalid publication 'pub-name': multiple artifacts with the identical name, extension, type and classifier ('ivy', xml', 'xml', 'null')."
+    }
+
     private def projectIdentity(def groupId, def artifactId, def version) {
-        return Stub(IvyProjectIdentity) {
+        return Stub(IvyPublicationIdentity) {
             getOrganisation() >> groupId
             getModule() >> artifactId
             getRevision() >> version
         }
     }
 
-    private def ivyFile(def group, def moduleName, def version) {
+    private def ivyFile(def group, def moduleName, def version, Action<XmlProvider> action = null) {
         def ivyXmlFile = testDir.file("ivy")
-        IvyDescriptorFileGenerator ivyFileGenerator = new IvyDescriptorFileGenerator(new DefaultIvyProjectIdentity(group, moduleName, version))
+        IvyDescriptorFileGenerator ivyFileGenerator = new IvyDescriptorFileGenerator(new DefaultIvyPublicationIdentity(group, moduleName, version))
+        if (action != null) {
+            ivyFileGenerator.withXml(action)
+        }
         ivyFileGenerator.writeTo(ivyXmlFile)
         return ivyXmlFile
     }

@@ -78,7 +78,7 @@ This story adds a second type of component and a DSL to define which components 
     - Default the publication's (groupId, artifactId, version) to (project.group, project.name, project.version).
 2. Allow zero or one components to be added to a Maven publication.
 3. Change the `maven-publish` plugin so that it does not create any publications by default.
-4. Change the `war` plugin to add a component called `web`. When this component is added to a publication, the WAR artifact is added to the publication.
+4. Change the `war` plugin to add a component called `web`. When this component is added to a publication, the WAR artifact (only) is added to the publication.
 5. Fix publishing a Maven publication with no artifacts.
 
 To publish a Java library
@@ -356,6 +356,31 @@ Validate the following prior to publication:
 * Check that an Ant build that uses Ivy can resolve a Java library published to an Maven repository.
 * Check that a Maven build can resolve a Java library published to a Maven repository.
 
+## Report on failures to publish
+
+There are many cases where a repository may fail to publish the requested artifacts successfully.
+One example is publishing to a Windows FileRepository an artifact with version containing ":", which is illegal in a windows file name.
+The Maven Ant tasks (and possibly the Ivy DependencyResolver) will silently fail in these cases.
+
+This story will address this issue, by ensuring that failure to publish is detected by the supported repository implementations, and that this failure is reported to the user.
+
+1. Replace DependencyResolverIvyPublisher with an implementation built directly on top of ExternalResourceRepository.
+   - No ivy concepts should be in this implementation if possible
+   - Reuse code from resolver for mapping artifact attributes -> primary URL
+2. Replace AntTaskBackedMavenPublisher with an implementation built directly on top of ExternalResourceRepository.
+   - Reuse Maven code for creating maven-metadata.xml if possible
+   - No ivy concepts should be introduced to this implementation
+   - Reuse code from resolver for mapping artifact attributes -> primary URL
+3. Update ExternalResourceRepository.put() so that it reports on any failure to publish, and ensure that these failures are reported in the publishing output.
+
+### Test cases
+
+* Create Ivy publication with version = "1:3" and publish to FileSystem repository on Windows. Assert that failure is reported.
+* Publish 2 Ivy publications with versions that only differ by case to a FileSystem repository on Windows. Assert that the second publication does not overwrite the first.
+* Publish an Ivy publication with extension ending in '.' to FileSystem repository on Windows. Assert that failure is reported.
+* Publish an Ivy publication to an HTTP repository that returns a 500. Assert that failure is reported.
+* Similar tests for Maven publications.
+
 ## Customising the Maven and Ivy publication identifier
 
 This step will allow some basic customisation of the meta data model for each publication:
@@ -363,7 +388,7 @@ This step will allow some basic customisation of the meta data model for each pu
 1. Add `groupId`, `artifactId`, `version` properties to `MavenPublication` and `MavenPom`. Add `packaging` property to `MavenPom`.
 2. Change `pom.xml` generation to use these properties.
 3. Add `organisation`, `module`, `revision` properties to `IvyPublication` and `IvyModuleDescriptor`. Add `status` property to `IvyModuleDescriptor`.
-4. Change `ivy.xml` generation to use these properties.
+4. Change `ivy.xml` generation to use these properties. Do not default `status` to `project.status` (this value should have not effect on ivy publication).
 5. Change the `ivy.xml` generation to prefer the (organisation, module, revision) identifier of the `IvyPublication` instance from the target project
    for a project dependencies, over the existing candidate identifiers.
 6. Change the `pom.xml` generation to prefer the (groupId, artifactId, version) identifier of the `MavenPublication` instance from the target project
@@ -447,7 +472,7 @@ This step decouples the incoming and outgoing dependency declarations, to allow 
     * `scope` (optional, default to null and restrict values to [compile, provided, runtime, test, system])
 2. Add a `MavenDependencySet` concept. This is a collection of `MavenDependency` instances.
 3. Add a `MavenDependencySet` to `MavenPublication`.
-4. Add an `IvyDependency` interface, with the following properties:
+4. Extend the `IvyDependency` to add the following properties:
     * `organisation` (required)
     * `module` (required)
     * `revision` (required)
@@ -526,7 +551,7 @@ To replace dependencies in an Ivy publication:
     }
 
 The 'dependency' creation method will accept the following forms of input:
-* An ExternalModuleDependency, that will be adapted to IvyDependency/MavenDependency
+* An `ExternalModuleDependency`, that will be adapted to IvyDependency/MavenDependency
 * An string formatted as "groupId:artifactId:revision[:scope]" for Maven, or "organisation:module:version[:confMapping]" for Ivy
 * A configuration closure to specify values for created dependency
 * Either of the first 2, together with a configuration closure that permits further configuration (like adding scope/conf)

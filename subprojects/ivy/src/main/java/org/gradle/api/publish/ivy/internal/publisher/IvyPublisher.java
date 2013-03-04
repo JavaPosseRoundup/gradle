@@ -16,8 +16,8 @@
 
 package org.gradle.api.publish.ivy.internal.publisher;
 
-import org.gradle.api.artifacts.repositories.IvyArtifactRepository;
+import org.gradle.api.internal.artifacts.repositories.PublicationAwareRepository;
 
 public interface IvyPublisher {
-    void publish(IvyNormalizedPublication publication, IvyArtifactRepository repository);
+    void publish(IvyNormalizedPublication publication, PublicationAwareRepository repository);
 }

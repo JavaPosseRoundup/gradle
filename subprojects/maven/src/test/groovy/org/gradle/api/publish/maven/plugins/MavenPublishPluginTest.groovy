@@ -16,7 +16,6 @@
 
 package org.gradle.api.publish.maven.plugins
 import org.gradle.api.artifacts.ArtifactRepositoryContainer
-import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.artifacts.PublishArtifactSet
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.artifacts.DependencyResolutionServices
@@ -49,14 +48,14 @@ class MavenPublishPluginTest extends Specification {
         component.artifacts >> artifactSet
     }
 
-    def "no publication without component"() {
+    def "no publication by default"() {
         expect:
         publishing.publications.empty
     }
 
     def "publication can be added"() {
         when:
-        publishing.publications.add("test", MavenPublication)
+        publishing.publications.create("test", MavenPublication)
 
         then:
         publishing.publications.size() == 1
@@ -65,7 +64,7 @@ class MavenPublishPluginTest extends Specification {
 
     def "creates publish tasks for publication and repository"() {
         when:
-        publishing.publications.add("test", MavenPublication)
+        publishing.publications.create("test", MavenPublication)
         publishing.repositories { maven { url = "http://foo.com" } }
 
         then:
@@ -74,32 +73,9 @@ class MavenPublishPluginTest extends Specification {
         project.tasks["generatePomFileForTestPublication"] != null
     }
 
-    def "publication has artifacts from component"() {
-        given:
-        File artifactFile = project.file('artifactFile') << "content"
-        PublishArtifactSet artifactSet = Mock()
-        PublishArtifact artifact = Stub() {
-            getFile() >> artifactFile
-        }
-
-        when:
-        publishing.publications.add("test", MavenPublication) {
-            from component
-        }
-        def pub = publishing.publications.test;
-
-        then:
-        pub.artifacts.size() == 1
-        pub.artifacts.iterator().next().file == artifact.getFile()
-
-        and:
-        component.artifacts >> artifactSet
-        artifactSet.iterator() >> [artifact].iterator()
-    }
-
     def "task is created for publishing to mavenLocal"() {
         given:
-        publishing.publications.add("test", MavenPublication)
+        publishing.publications.create("test", MavenPublication)
 
         expect:
         publishLocalTasks.size() == 1
@@ -110,7 +86,7 @@ class MavenPublishPluginTest extends Specification {
 
     def "can explicitly add mavenLocal as a publishing repository"() {
         given:
-        publishing.publications.add("test", MavenPublication)
+        publishing.publications.create("test", MavenPublication)
 
         when:
         def mavenLocal = publishing.repositories.mavenLocal()
@@ -125,7 +101,7 @@ class MavenPublishPluginTest extends Specification {
 
     def "tasks are created for compatible publication / repo"() {
         given:
-        publishing.publications.add("test", MavenPublication)
+        publishing.publications.create("test", MavenPublication)
 
         expect:
         publishTasks.size() == 0
@@ -169,7 +145,7 @@ class MavenPublishPluginTest extends Specification {
         project.version = "version"
 
         and:
-        publishing.publications.add("test", MavenPublication)
+        publishing.publications.create("test", MavenPublication)
 
         then:
         with(publishing.publications.test.mavenProjectIdentity) {
@@ -190,7 +166,7 @@ class MavenPublishPluginTest extends Specification {
 
     def "pom dir moves with build dir"() {
         when:
-        publishing.publications.add("test", MavenPublication)
+        publishing.publications.create("test", MavenPublication)
 
         then:
         project.tasks["generatePomFileForTestPublication"].destination == new File(project.buildDir, "publications/test/pom-default.xml")

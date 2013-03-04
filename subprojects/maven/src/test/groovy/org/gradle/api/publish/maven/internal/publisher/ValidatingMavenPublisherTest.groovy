@@ -60,17 +60,20 @@ public class ValidatingMavenPublisherTest extends Specification {
 
         then:
         def e = thrown InvalidMavenPublicationException
-        e.message == "Invalid publication 'pub-name': $message"
+        e.message == "Invalid publication 'pub-name': $message."
 
         where:
-        groupId             | artifactId             | version   | message
-        ""                  | "artifact"             | "version" | "groupId cannot be empty"
-        "group"             | ""                     | "version" | "artifactId cannot be empty"
-        "group"             | "artifact"             | ""        | "version cannot be empty"
-        "group with spaces" | "artifact"             | "version" | "groupId is not a valid Maven identifier ([A-Za-z0-9_\\-.]+)"
-        "group-₦ガき∆"        | "artifact"             | "version" | "groupId is not a valid Maven identifier ([A-Za-z0-9_\\-.]+)"
-        "group"             | "artifact with spaces" | "version" | "artifactId is not a valid Maven identifier ([A-Za-z0-9_\\-.]+)"
-        "group"             | "artifact-₦ガき∆"        | "version" | "artifactId is not a valid Maven identifier ([A-Za-z0-9_\\-.]+)"
+        groupId             | artifactId             | version     | message
+        ""                  | "artifact"             | "version"   | "groupId cannot be empty"
+        "group"             | ""                     | "version"   | "artifactId cannot be empty"
+        "group"             | "artifact"             | ""          | "version cannot be empty"
+        "group with spaces" | "artifact"             | "version"   | "groupId is not a valid Maven identifier ([A-Za-z0-9_\\-.]+)"
+        "group-₦ガき∆"        | "artifact"            | "version"   | "groupId is not a valid Maven identifier ([A-Za-z0-9_\\-.]+)"
+        "group"             | "artifact with spaces" | "version"   | "artifactId is not a valid Maven identifier ([A-Za-z0-9_\\-.]+)"
+        "group"             | "artifact-₦ガき∆"       | "version"   | "artifactId is not a valid Maven identifier ([A-Za-z0-9_\\-.]+)"
+        "group"             | "artifact"             | "vers/ion"  | "version cannot contain '/'"
+        "group"             | "artifact"             | "vers\\ion"  | "version cannot contain '\\'"
+        "group"             | "artifact"             | "version\t" | "version cannot contain ISO control character '\\u0009'"
     }
 
     def "project coordinates must match POM file"() {
@@ -109,12 +112,16 @@ public class ValidatingMavenPublisherTest extends Specification {
 
         then:
         def t = thrown InvalidMavenPublicationException
-        t.message == "Invalid publication 'pub-name': artifact ${name} cannot be an empty string. Use null instead."
+        t.message == "Invalid publication 'pub-name': artifact ${message}."
 
         where:
-        name         | extension | classifier
-        "extension"  | ""        | "classifier"
-        "classifier" | "ext"     | ""
+        extension | classifier     | message
+        null      | "classifier"   | "extension cannot be null"
+        "ext"     | ""             | "classifier cannot be an empty string. Use null instead"
+        "ex\r"    | "classifier"   | "extension cannot contain ISO control character '\\u000d'"
+        "ex/"     | "classifier"   | "extension cannot contain '/'"
+        "ext"     | "classi\u0090fier" | "classifier cannot contain ISO control character '\\u0090'"
+        "ext"     | "class\\ifier" | "classifier cannot contain '\\'"
     }
 
     @Unroll
@@ -128,11 +135,12 @@ public class ValidatingMavenPublisherTest extends Specification {
         publisher.publish(publication, Mock(MavenArtifactRepository))
 
         then:
+        mavenArtifact.extension >> "ext"
         mavenArtifact.file >> theFile
 
         and:
         def t = thrown InvalidMavenPublicationException
-        t.message == "Cannot publish maven publication 'pub-name': artifact file ${message}: '${theFile}'"
+        t.message == "Invalid publication 'pub-name': artifact file ${message}: '${theFile}'"
 
         where:
         theFile                                                         | message
@@ -161,7 +169,26 @@ public class ValidatingMavenPublisherTest extends Specification {
 
         then:
         def t = thrown InvalidMavenPublicationException
-        t.message == "Cannot publish maven publication 'pub-name': multiple artifacts with the identical extension 'ext1' and classifier 'classified'."
+        t.message == "Invalid publication 'pub-name': multiple artifacts with the identical extension and classifier ('ext1', 'classified')."
+    }
+
+    def "cannot publish extra artifact with same attributes as POM"() {
+        given:
+        MavenArtifact artifact1 = Stub() {
+            getExtension() >> "pom"
+            getClassifier() >> null
+            getFile() >> testDir.createFile('artifact1')
+        }
+        def projectIdentity = projectIdentity("group", "artifact", "version")
+        def pomFile = createPomFile("group", "artifact", "version")
+        def publication = new MavenNormalizedPublication("pub-name", pomFile, projectIdentity, toSet([artifact1]))
+
+        when:
+        publisher.publish(publication, Mock(MavenArtifactRepository))
+
+        then:
+        def t = thrown InvalidMavenPublicationException
+        t.message == "Invalid publication 'pub-name': multiple artifacts with the identical extension and classifier ('pom', 'null')."
     }
 
     def "supplied POM file must be valid"() {

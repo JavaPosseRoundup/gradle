@@ -38,9 +38,7 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
         mavenModule.assertPublishedAsJavaModule()
 
         mavenModule.parsedPom.scopes.keySet() == ["runtime"] as Set
-        mavenModule.parsedPom.scopes.runtime.dependencies.size() == 2
-        mavenModule.parsedPom.scopes.runtime.assertDependsOn("commons-collections", "commons-collections", "3.2.1")
-        mavenModule.parsedPom.scopes.runtime.assertDependsOn("commons-io", "commons-io", "1.4")
+        mavenModule.parsedPom.scopes.runtime.assertDependsOn("commons-collections:commons-collections:3.2.1", "commons-io:commons-io:1.4")
 
         and:
         resolveArtifacts(mavenModule) == ["commons-collections-3.2.1.jar", "commons-io-1.4.jar", "publishTest-1.9.jar"]
@@ -84,10 +82,10 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
                         from components.java
                     }
                 }
-            }
-            publishing.publications.maven.artifacts.each {
-                if (it.extension == 'jar') {
-                    it.classifier = 'classified'
+                publications.maven.artifacts.each {
+                    if (it.extension == 'jar') {
+                        it.classifier = 'classified'
+                    }
                 }
             }
 """)
@@ -111,6 +109,14 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
             apply plugin: 'maven-publish'
             apply plugin: 'java'
 
+            publishing {
+                repositories {
+                    maven { url "${mavenRepo.uri}" }
+                }
+            }
+
+$append
+
             group = 'org.gradle.test'
             version = '1.9'
 
@@ -123,14 +129,6 @@ class MavenPublishJavaIntegTest extends AbstractMavenPublishIntegTest {
                 runtime "commons-io:commons-io:1.4"
                 testCompile "junit:junit:4.11"
             }
-
-            publishing {
-                repositories {
-                    maven { url "${mavenRepo.uri}" }
-                }
-            }
-
-$append
 """
 
     }

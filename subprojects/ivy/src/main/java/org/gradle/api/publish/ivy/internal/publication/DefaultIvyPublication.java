@@ -18,44 +18,47 @@ package org.gradle.api.publish.ivy.internal.publication;
 
 import org.gradle.api.Action;
 import org.gradle.api.InvalidUserDataException;
-import org.gradle.api.artifacts.Dependency;
+import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.PublishArtifact;
 import org.gradle.api.component.SoftwareComponent;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.component.SoftwareComponentInternal;
+import org.gradle.api.internal.component.Usage;
 import org.gradle.api.internal.file.UnionFileCollection;
 import org.gradle.api.internal.notations.api.NotationParser;
 import org.gradle.api.publish.ivy.IvyArtifact;
-import org.gradle.api.publish.ivy.IvyConfiguration;
 import org.gradle.api.publish.ivy.IvyConfigurationContainer;
 import org.gradle.api.publish.ivy.IvyModuleDescriptor;
 import org.gradle.api.publish.ivy.internal.artifact.DefaultIvyArtifactSet;
+import org.gradle.api.publish.ivy.internal.dependency.DefaultIvyDependency;
+import org.gradle.api.publish.ivy.internal.dependency.DefaultIvyDependencySet;
+import org.gradle.api.publish.ivy.internal.dependency.IvyDependencyInternal;
 import org.gradle.api.publish.ivy.internal.publisher.IvyNormalizedPublication;
-import org.gradle.api.publish.ivy.internal.publisher.IvyProjectIdentity;
+import org.gradle.api.publish.ivy.internal.publisher.IvyPublicationIdentity;
 import org.gradle.internal.reflect.Instantiator;
 
 import java.io.File;
-import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class DefaultIvyPublication implements IvyPublicationInternal {
 
     private final String name;
     private final IvyModuleDescriptorInternal descriptor;
-    private final IvyProjectIdentity projectIdentity;
+    private final IvyPublicationIdentity publicationIdentity;
     private final IvyConfigurationContainer configurations;
     private final DefaultIvyArtifactSet ivyArtifacts;
-    private final Set<Dependency> runtimeDependencies = new LinkedHashSet<Dependency>();
+    private final DefaultIvyDependencySet ivyDependencies;
     private FileCollection descriptorFile;
     private SoftwareComponentInternal component;
 
     public DefaultIvyPublication(
-            String name, Instantiator instantiator, IvyProjectIdentity projectIdentity, NotationParser<IvyArtifact> ivyArtifactNotationParser
+            String name, Instantiator instantiator, IvyPublicationIdentity publicationIdentity, NotationParser<IvyArtifact> ivyArtifactNotationParser
     ) {
         this.name = name;
-        this.projectIdentity = projectIdentity;
+        this.publicationIdentity = publicationIdentity;
         configurations = instantiator.newInstance(DefaultIvyConfigurationContainer.class, instantiator);
         ivyArtifacts = instantiator.newInstance(DefaultIvyArtifactSet.class, name, ivyArtifactNotationParser);
+        ivyDependencies = instantiator.newInstance(DefaultIvyDependencySet.class);
         descriptor = instantiator.newInstance(DefaultIvyModuleDescriptor.class, this);
     }
 
@@ -81,22 +84,23 @@ public class DefaultIvyPublication implements IvyPublicationInternal {
         }
         this.component = (SoftwareComponentInternal) component;
 
-        for (PublishArtifact publishArtifact : this.component.getArtifacts()) {
-            artifact(publishArtifact).setConf("runtime");
+        configurations.maybeCreate("default");
+
+        for (Usage usage : this.component.getUsages()) {
+            String conf = usage.getName();
+            configurations.maybeCreate(conf);
+            configurations.getByName("default").extend(conf);
+
+            for (PublishArtifact publishArtifact : usage.getArtifacts()) {
+                artifact(publishArtifact).setConf(conf);
+            }
+
+            for (ModuleDependency dependency : usage.getDependencies()) {
+                // TODO: When we support multiple components or configurable dependencies, we'll need to merge the confs of multiple dependencies with same id.
+                String confMapping = String.format("%s->%s", conf, dependency.getConfiguration());
+                ivyDependencies.add(new DefaultIvyDependency(dependency, confMapping));
+            }
         }
-
-        createConfiguration("runtime");
-        createConfiguration("default").extend("runtime");
-
-        runtimeDependencies.addAll(this.component.getRuntimeDependencies());
-    }
-
-    private IvyConfiguration createConfiguration(String name) {
-        IvyConfiguration configuration = configurations.findByName(name);
-        if (configuration != null) {
-            return configuration;
-        }
-        return configurations.create(name);
     }
 
     public void configurations(Action<? super IvyConfigurationContainer> config) {
@@ -130,16 +134,16 @@ public class DefaultIvyPublication implements IvyPublicationInternal {
         return new UnionFileCollection(ivyArtifacts.getFiles(), descriptorFile);
     }
 
-    public IvyProjectIdentity getProjectIdentity() {
-        return projectIdentity;
+    public IvyPublicationIdentity getIdentity() {
+        return publicationIdentity;
     }
 
-    public Set<Dependency> getRuntimeDependencies() {
-        return runtimeDependencies;
+    public Set<IvyDependencyInternal> getDependencies() {
+        return ivyDependencies;
     }
 
     public IvyNormalizedPublication asNormalisedPublication() {
-        return new IvyNormalizedPublication(name, getProjectIdentity(), getDescriptorFile(), ivyArtifacts);
+        return new IvyNormalizedPublication(name, getIdentity(), getDescriptorFile(), ivyArtifacts);
     }
 
     private File getDescriptorFile() {

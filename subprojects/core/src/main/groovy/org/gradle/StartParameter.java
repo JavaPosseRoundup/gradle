@@ -123,6 +123,7 @@ public class StartParameter extends LoggingConfiguration implements Serializable
         p.settingsFile = settingsFile;
         p.useEmptySettings = useEmptySettings;
         p.taskNames = new ArrayList<String>(taskNames);
+        p.excludedTaskNames = new HashSet<String>(excludedTaskNames);
         p.buildProjectDependencies = buildProjectDependencies;
         p.currentDir = currentDir;
         p.searchUpwards = searchUpwards;
@@ -639,7 +640,7 @@ public class StartParameter extends LoggingConfiguration implements Serializable
 
     @Incubating
     public boolean isParallelThreadCountConfigured() {
-        //This is not beautiful. As the number of gradle properies grows we may something like:
+        //This is not beautiful. As the number of gradle properties grows we may something like:
         //1. Make StartParameter an interface
         //2. StartParameter (StartParameterInternal) needs to inform if certain property was configured or not
         return parallelThreadCountConfigured;

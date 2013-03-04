@@ -86,8 +86,10 @@ class IvyPublishDescriptorCustomisationIntegTest extends AbstractIntegrationSpec
         given:
         def moduleName = module.module
         buildFile << """
-            generateIvyModuleDescriptor {
-                destination = 'generated-ivy.xml'
+            publishing {
+                generateIvyModuleDescriptor {
+                    destination = 'generated-ivy.xml'
+                }
             }
         """
 
@@ -97,7 +99,7 @@ class IvyPublishDescriptorCustomisationIntegTest extends AbstractIntegrationSpec
         then:
         file('generated-ivy.xml').assertIsFile()
         IvyDescriptor ivy = new IvyDescriptor(file('generated-ivy.xml'))
-        ivy.artifacts[moduleName].hasAttributes("jar", "jar", ["runtime"])
+        ivy.expectArtifact(moduleName).hasAttributes("jar", "jar", ["runtime"])
         module.ivyFile.assertDoesNotExist()
     }
 

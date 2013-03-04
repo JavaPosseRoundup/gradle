@@ -26,11 +26,15 @@ import org.gradle.api.InvalidUserDataException;
  */
 @Incubating
 public class InvalidMavenPublicationException extends InvalidUserDataException {
-    public InvalidMavenPublicationException(String message) {
-        super(message);
+    public InvalidMavenPublicationException(String publicationName, String error) {
+        super(formatMessage(publicationName, error));
     }
 
-    public InvalidMavenPublicationException(String message, Throwable cause) {
-        super(message, cause);
+    public InvalidMavenPublicationException(String publicationName, String error, Throwable cause) {
+        super(formatMessage(publicationName, error), cause);
+    }
+
+    private static String formatMessage(String publicationName, String error) {
+        return String.format("Invalid publication '%s': %s", publicationName, error);
     }
 }

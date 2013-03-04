@@ -16,8 +16,8 @@
 
 package org.gradle.api.publish.ivy.internal.artifact;
 
+import org.apache.commons.lang.StringUtils;
 import org.gradle.api.artifacts.PublishArtifact;
-import org.gradle.api.internal.artifacts.dsl.ArtifactFile;
 import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.notations.NotationParserBuilder;
 import org.gradle.api.internal.notations.api.NotationParser;
@@ -26,24 +26,25 @@ import org.gradle.api.internal.notations.parsers.MapKey;
 import org.gradle.api.internal.notations.parsers.MapNotationParser;
 import org.gradle.api.internal.notations.parsers.TypedNotationParser;
 import org.gradle.api.publish.ivy.IvyArtifact;
+import org.gradle.api.publish.ivy.internal.publisher.IvyPublicationIdentity;
 import org.gradle.api.tasks.bundling.AbstractArchiveTask;
 import org.gradle.internal.Factory;
 import org.gradle.internal.reflect.Instantiator;
-import org.gradle.util.GUtil;
 
 import java.io.File;
 import java.util.Collection;
 
 public class IvyArtifactNotationParserFactory implements Factory<NotationParser<IvyArtifact>> {
     private final Instantiator instantiator;
-    private final String version;
     private final FileResolver fileResolver;
+    private final String defaultArtifactName;
 
-    public IvyArtifactNotationParserFactory(Instantiator instantiator, String version, FileResolver fileResolver) {
+    public IvyArtifactNotationParserFactory(Instantiator instantiator, FileResolver fileResolver, IvyPublicationIdentity publicationIdentity) {
         this.instantiator = instantiator;
-        // TODO:DAZ Remove the use of version in parsing artifact names
-        this.version = version;
         this.fileResolver = fileResolver;
+
+        // TODO - Need to handle name being modified after addition of artifacts, once we have that functionality.
+        this.defaultArtifactName = publicationIdentity.getModule();
     }
 
     public NotationParser<IvyArtifact> create() {
@@ -79,7 +80,7 @@ public class IvyArtifactNotationParserFactory implements Factory<NotationParser<
         protected IvyArtifact parseType(AbstractArchiveTask archiveTask) {
             DefaultIvyArtifact ivyArtifact = instantiator.newInstance(
                     DefaultIvyArtifact.class,
-                    archiveTask.getArchivePath(), archiveTask.getBaseName(), GUtil.elvis(archiveTask.getExtension(), null), archiveTask.getExtension(), GUtil.elvis(archiveTask.getClassifier(), null)
+                    archiveTask.getArchivePath(), defaultArtifactName, archiveTask.getExtension(), archiveTask.getExtension(), archiveTask.getClassifier()
             );
             ivyArtifact.builtBy(archiveTask);
             return ivyArtifact;
@@ -95,7 +96,7 @@ public class IvyArtifactNotationParserFactory implements Factory<NotationParser<
         protected IvyArtifact parseType(PublishArtifact publishArtifact) {
             DefaultIvyArtifact ivyArtifact = instantiator.newInstance(
                     DefaultIvyArtifact.class,
-                    publishArtifact.getFile(), publishArtifact.getName(), emptyToNull(publishArtifact.getExtension()), emptyToNull(publishArtifact.getType()), emptyToNull(publishArtifact.getClassifier())
+                    publishArtifact.getFile(), defaultArtifactName, publishArtifact.getExtension(), publishArtifact.getType(), publishArtifact.getClassifier()
             );
             ivyArtifact.builtBy(publishArtifact.getBuildDependencies());
             return ivyArtifact;
@@ -115,10 +116,10 @@ public class IvyArtifactNotationParserFactory implements Factory<NotationParser<
         }
 
         protected IvyArtifact parseFile(File file) {
-            ArtifactFile artifactFile = new ArtifactFile(file, version);
+            String extension = StringUtils.substringAfterLast(file.getName(), ".");
             return instantiator.newInstance(
-                    DefaultIvyArtifact.class, file,
-                    artifactFile.getName(), artifactFile.getExtension(), artifactFile.getExtension(), artifactFile.getClassifier()
+                    DefaultIvyArtifact.class,
+                    file, defaultArtifactName, extension, extension, null
             );
         }
 
@@ -143,9 +144,4 @@ public class IvyArtifactNotationParserFactory implements Factory<NotationParser<
             candidateFormats.add("Maps containing a 'source' entry, e.g. [source: '/path/to/file', extension: 'zip'].");
         }
     }
-
-    private static String emptyToNull(String value) {
-        return GUtil.elvis(value, null);
-    }
-
 }

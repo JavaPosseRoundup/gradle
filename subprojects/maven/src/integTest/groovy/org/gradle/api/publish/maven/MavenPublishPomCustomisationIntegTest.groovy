@@ -17,9 +17,11 @@
 
 
 package org.gradle.api.publish.maven
+
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.util.SetSystemProperties
 import org.junit.Rule
+
 /**
  * Tests maven POM customisation
  */
@@ -61,7 +63,7 @@ class MavenPublishPomCustomisationIntegTest extends AbstractIntegrationSpec {
         def module = mavenRepo.module('org.gradle.test', 'customisePom', '1.0')
         module.assertPublished()
         module.parsedPom.description == 'custom-description'
-        module.parsedPom.scopes.runtime.assertDependsOn("junit", "junit", "4.11")
+        module.parsedPom.scopes.runtime.assertDependsOn("junit:junit:4.11")
     }
 
     def "can generate pom file without publishing"() {
@@ -84,9 +86,9 @@ class MavenPublishPomCustomisationIntegTest extends AbstractIntegrationSpec {
                         }
                     }
                 }
-            }
-            generatePomFileForEmptyMavenPublication {
-                destination = 'build/generated-pom.xml'
+                generatePomFileForEmptyMavenPublication {
+                    destination = 'build/generated-pom.xml'
+                }
             }
         """
 

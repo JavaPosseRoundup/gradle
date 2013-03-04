@@ -15,17 +15,20 @@
  */
 
 package org.gradle.api.publish.ivy.internal.publication
+
 import org.gradle.api.InvalidUserDataException
 import org.gradle.api.artifacts.DependencySet
+import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.artifacts.PublishArtifactSet
 import org.gradle.api.internal.AsmBackedClassGenerator
 import org.gradle.api.internal.ClassGeneratorBackedInstantiator
 import org.gradle.api.internal.component.SoftwareComponentInternal
+import org.gradle.api.internal.component.Usage
 import org.gradle.api.internal.file.collections.SimpleFileCollection
 import org.gradle.api.internal.notations.api.NotationParser
 import org.gradle.api.publish.ivy.IvyArtifact
-import org.gradle.api.publish.ivy.internal.publisher.IvyProjectIdentity
+import org.gradle.api.publish.ivy.internal.publisher.IvyPublicationIdentity
 import org.gradle.internal.reflect.DirectInstantiator
 import org.gradle.internal.reflect.Instantiator
 import org.gradle.test.fixtures.file.TestDirectoryProvider
@@ -37,7 +40,7 @@ class DefaultIvyPublicationTest extends Specification {
 
     @Shared TestDirectoryProvider testDirectoryProvider = new TestNameTestDirectoryProvider()
     Instantiator instantiator = new ClassGeneratorBackedInstantiator(new AsmBackedClassGenerator(), new DirectInstantiator())
-    def projectIdentity = Mock(IvyProjectIdentity)
+    def projectIdentity = Mock(IvyPublicationIdentity)
     def notationParser = Mock(NotationParser)
     File descriptorFile
     File artifactFile
@@ -61,49 +64,78 @@ class DefaultIvyPublicationTest extends Specification {
         def publication = createPublication()
 
         then:
-        artifactsOf(publication).empty
+        publication.artifacts.empty
         publication.publishableFiles.files == [descriptorFile] as Set
-        publication.runtimeDependencies.empty
+        publication.dependencies.empty
     }
 
-    def "adopts dependencies, configurations, artifacts and publishableFiles from added component"() {
+    def "adopts configurations, artifacts and publishableFiles from added component"() {
         given:
         def publication = createPublication()
 
         def component = Mock(SoftwareComponentInternal)
-        def publishArtifactSet = Mock(PublishArtifactSet)
+        def usage1 = Mock(Usage)
         def artifact = Mock(PublishArtifact)
-        def dependencySet = Mock(DependencySet)
         def ivyArtifact = createArtifact()
 
         when:
-        component.artifacts >> publishArtifactSet
-        publishArtifactSet.iterator() >> [artifact].iterator()
-        component.runtimeDependencies >> dependencySet
-        dependencySet.iterator() >> [].iterator()
+        component.usages >> [usage1]
+        usage1.name >> "runtime"
+        usage1.artifacts >> [artifact]
+        usage1.dependencies >> []
 
         notationParser.parseNotation(artifact) >> ivyArtifact
+        1 * ivyArtifact.setConf("runtime")
 
         and:
         publication.from(component)
 
         then:
-        artifactsOf(publication) == [ivyArtifact] as Set
         publication.publishableFiles.files == [descriptorFile, artifactFile] as Set
-        publication.runtimeDependencies == dependencySet
+        publication.artifacts == [ivyArtifact] as Set
 
         and:
         publication.configurations.size() == 2
         publication.configurations.runtime.extends == [] as Set
         publication.configurations."default".extends == ["runtime"] as Set
+        
+        publication.dependencies.empty
+    }
 
-        publication.artifacts == [ivyArtifact] as Set
+    def "adopts dependencies from added component"() {
+        given:
+        def publication = createPublication()
+
+        def component = Mock(SoftwareComponentInternal)
+        def usage1 = Mock(Usage)
+        def moduleDependency = Mock(ModuleDependency)
+
+        when:
+        component.usages >> [usage1]
+        usage1.name >> "runtime"
+        usage1.artifacts >> []
+        usage1.dependencies >> [moduleDependency]
+
+        moduleDependency.configuration >> "dep-configuration"
+
+        and:
+        publication.from(component)
+
+        then:
+        publication.publishableFiles.files == [descriptorFile] as Set
+        publication.artifacts.empty
+        and:
+        publication.dependencies.size() == 1
+        def ivyDependency = publication.dependencies.asList().first()
+        ivyDependency.moduleDependency == moduleDependency
+        ivyDependency.confMapping == "runtime->dep-configuration"
     }
 
     def "cannot add multiple components"() {
         given:
         def publication = createPublication()
         def component = Mock(SoftwareComponentInternal)
+        def usage = Mock(Usage)
         def publishArtifactSet = Mock(PublishArtifactSet)
         def dependencySet = Mock(DependencySet)
 
@@ -111,9 +143,11 @@ class DefaultIvyPublicationTest extends Specification {
         publication.from(component)
 
         then:
-        component.artifacts >> publishArtifactSet
+        component.usages >> [usage]
+        usage.name >> "runtime"
+        usage.artifacts >> publishArtifactSet
         publishArtifactSet.iterator() >> [].iterator()
-        component.runtimeDependencies >> dependencySet
+        usage.dependencies >> dependencySet
         dependencySet.iterator() >> [].iterator()
 
         when:
@@ -150,7 +184,6 @@ class DefaultIvyPublicationTest extends Specification {
         publication.artifact notation
 
         then:
-        artifactsOf(publication) == [ivyArtifact] as Set
         publication.artifacts == [ivyArtifact] as Set
         publication.publishableFiles.files == [descriptorFile, artifactFile] as Set
     }
@@ -172,7 +205,7 @@ class DefaultIvyPublicationTest extends Specification {
         }
 
         then:
-        artifactsOf(publication) == [ivyArtifact] as Set
+        publication.artifacts == [ivyArtifact] as Set
         publication.publishableFiles.files == [descriptorFile, artifactFile] as Set
     }
 
@@ -206,14 +239,9 @@ class DefaultIvyPublicationTest extends Specification {
     }
 
     def createArtifact() {
-        IvyArtifact artifact = Mock() {
+        IvyArtifact artifact = Mock(IvyArtifact) {
             getFile() >> artifactFile
         }
         return artifact
     }
-
-    private static Set<IvyArtifact> artifactsOf(DefaultIvyPublication publication) {
-        publication.asNormalisedPublication().artifacts
-    }
-
 }
