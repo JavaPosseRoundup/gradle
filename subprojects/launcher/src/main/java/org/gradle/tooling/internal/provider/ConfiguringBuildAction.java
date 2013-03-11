@@ -15,15 +15,13 @@
  */
 package org.gradle.tooling.internal.provider;
 
-import org.gradle.BuildResult;
-import org.gradle.GradleLauncher;
 import org.gradle.StartParameter;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.cli.CommandLineArgumentException;
+import org.gradle.initialization.BuildAction;
+import org.gradle.initialization.BuildController;
 import org.gradle.initialization.DefaultCommandLineConverter;
-import org.gradle.initialization.GradleLauncherAction;
 import org.gradle.launcher.daemon.configuration.GradleProperties;
-import org.gradle.launcher.exec.InitializationAware;
 import org.gradle.logging.ShowStacktrace;
 import org.gradle.tooling.internal.protocol.exceptions.InternalUnsupportedBuildArgumentException;
 import org.gradle.tooling.internal.provider.connection.ProviderOperationParameters;
@@ -33,11 +31,11 @@ import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 
-class ConfiguringBuildAction<T> implements GradleLauncherAction<T>, InitializationAware, Serializable {
+class ConfiguringBuildAction<T> implements BuildAction<T>, Serializable {
     private LogLevel buildLogLevel;
     private List<String> arguments;
     private List<String> tasks;
-    private GradleLauncherAction<T> action;
+    private BuildAction<T> action;
     private File projectDirectory;
     private File gradleUserHomeDir;
     private Boolean searchUpwards;
@@ -48,7 +46,7 @@ class ConfiguringBuildAction<T> implements GradleLauncherAction<T>, Initializati
 
     public ConfiguringBuildAction() {}
 
-    public ConfiguringBuildAction(ProviderOperationParameters parameters, GradleLauncherAction<T> action, GradleProperties gradleProperties) {
+    public ConfiguringBuildAction(ProviderOperationParameters parameters, BuildAction<T> action, GradleProperties gradleProperties) {
         this.configureOnDemand = gradleProperties.isConfigureOnDemand();
         this.gradleUserHomeDir = parameters.getGradleUserHomeDir();
         this.projectDirectory = parameters.getProjectDir();
@@ -59,20 +57,18 @@ class ConfiguringBuildAction<T> implements GradleLauncherAction<T>, Initializati
         this.action = action;
     }
 
-    public StartParameter configureStartParameter() {
+    StartParameter configureStartParameter() {
         StartParameter startParameter = startParameterTemplate.newInstance();
         startParameter.setProjectDir(projectDirectory);
         if (gradleUserHomeDir != null) {
             startParameter.setGradleUserHomeDir(gradleUserHomeDir);
-        }
-        if (searchUpwards != null) {
-            startParameter.setSearchUpwards(searchUpwards);
         }
 
         if (tasks != null) {
             startParameter.setTaskNames(tasks);
         }
 
+        //TODO SF find out if we don't need the the null check as above
         startParameter.setConfigureOnDemand(configureOnDemand);
 
         if (arguments != null) {
@@ -91,6 +87,10 @@ class ConfiguringBuildAction<T> implements GradleLauncherAction<T>, Initializati
             }
         }
 
+        if (searchUpwards != null) {
+            startParameter.setSearchUpwards(searchUpwards);
+        }
+
         if (buildLogLevel != null) {
             startParameter.setLogLevel(buildLogLevel);
         }
@@ -99,11 +99,8 @@ class ConfiguringBuildAction<T> implements GradleLauncherAction<T>, Initializati
         return startParameter;
     }
 
-    public BuildResult run(GradleLauncher launcher) {
-        return action.run(launcher);
-    }
-
-    public T getResult() {
-        return action.getResult();
+    public T run(BuildController buildController) {
+        buildController.setStartParameter(configureStartParameter());
+        return action.run(buildController);
     }
 }

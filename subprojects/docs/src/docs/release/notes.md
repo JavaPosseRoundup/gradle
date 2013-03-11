@@ -2,9 +2,27 @@
 
 Here are the new features introduced in this Gradle release.
 
-<!--
-### Example new and noteworthy
--->
+### Installation via Gradle Wrapper is now multi process safe
+
+In previous versions of Gradle it was possible for a Gradle distribution installed implicitly via the [Gradle Wrapper](userguide/gradle_wrapper.html) to be corrupted, 
+or to fail to install, if more than one process was trying to do this at the same time. This was more likely to occur on a continuous build server than a developer workstation. 
+This no longer occurs as the installation performed by the wrapper is now multi process safe.
+
+**Important:** leveraging the new multi process safe wrapper requires updating the `gradle-wrapper.jar` that is checked in to your project. 
+This requires an extra step to the usual wrapper upgrade process. 
+
+First, update your wrapper as per usual by updating the `gradleVersion` property of the wrapper task in the build…
+
+    task wrapper(type: Wrapper) {
+        gradleVersion = "1.6"
+    }
+
+Then run `./gradlew wrapper` to update the wrapper definition. This will configure the wrapper to use and download Gradle 1.6 for future builds, 
+but it has not updated the `gradle-wrapper.jar` that is checked in to your project. To do this, simply run `./gradlew wrapper` again. This is necessary as the wrapper 
+jar is sourced from the Gradle environment that is running the build. 
+
+If you are seeding a new project using an installation of Gradle 1.6 or higher, you do not need to run the wrapper task twice. It is only necessary when upgrading the 
+wrapper from an older version.
 
 ## Promoted features
 
@@ -19,18 +37,6 @@ The following are the features that have been promoted in this Gradle release.
 
 ## Fixed issues
 
-## Incubating features
-
-Incubating features are intended to be used, but not yet guaranteed to be backwards compatible.
-By giving early access to new features, real world feedback can be incorporated into their design.
-See the User guide section on the “[Feature Lifecycle](userguide/feature_lifecycle.html)” for more information.
-
-The following are the new incubating features or changes to existing incubating features in this Gradle release.
-
-<!--
-### Example incubating feature
--->
-
 ## Deprecations
 
 Features that have become superseded or irrelevant due to the natural evolution of Gradle become *deprecated*, and scheduled to be removed
@@ -44,9 +50,10 @@ The following are the newly deprecated items in this Gradle release. If you have
 
 ## Potential breaking changes
 
-<!--
-### Example breaking change
--->
+### org.gradle.api.artifacts.ProjectDependency now has an internal protocol
+
+This means that the users should not create own implementations of org.gradle.api.artifacts.ProjectDependency.
+This change should not affect any builds because there are no use cases supporting custom instances of ProjectDependency.
 
 ## External contributions
 

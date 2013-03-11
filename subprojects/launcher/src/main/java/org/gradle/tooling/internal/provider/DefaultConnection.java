@@ -17,15 +17,15 @@ package org.gradle.tooling.internal.provider;
 
 import org.gradle.StartParameter;
 import org.gradle.api.logging.LogLevel;
-import org.gradle.initialization.GradleLauncherAction;
+import org.gradle.initialization.BuildAction;
 import org.gradle.internal.Factory;
 import org.gradle.launcher.daemon.client.DaemonClient;
 import org.gradle.launcher.daemon.client.DaemonClientServices;
 import org.gradle.launcher.daemon.configuration.DaemonParameters;
 import org.gradle.launcher.daemon.configuration.GradleProperties;
 import org.gradle.launcher.daemon.configuration.GradlePropertiesConfigurer;
+import org.gradle.launcher.exec.BuildActionExecuter;
 import org.gradle.launcher.exec.BuildActionParameters;
-import org.gradle.launcher.exec.GradleLauncherActionExecuter;
 import org.gradle.logging.LoggingManagerInternal;
 import org.gradle.logging.LoggingServiceRegistry;
 import org.gradle.logging.internal.OutputEventRenderer;
@@ -128,7 +128,7 @@ public class DefaultConnection implements InternalConnection, BuildActionRunner,
             return type.cast(out);
         }
 
-        DelegatingBuildModelAction<T> action = new DelegatingBuildModelAction<T>(type, tasks != null);
+        BuildAction<T> action = new BuildModelAction<T>(type, tasks != null);
         return run(action, providerParameters, gradleProperties);
     }
 
@@ -136,16 +136,16 @@ public class DefaultConnection implements InternalConnection, BuildActionRunner,
         LOGGER.info("Tooling API uses target gradle version:" + " {}.", GradleVersion.current().getVersion());
     }
 
-    private <T> T run(GradleLauncherAction<T> action, ProviderOperationParameters operationParameters, GradleProperties gradleProperties) {
-        GradleLauncherActionExecuter<ProviderOperationParameters> executer = createExecuter(operationParameters);
+    private <T> T run(BuildAction<T> action, ProviderOperationParameters operationParameters, GradleProperties gradleProperties) {
+        BuildActionExecuter<ProviderOperationParameters> executer = createExecuter(operationParameters);
         ConfiguringBuildAction<T> configuringAction = new ConfiguringBuildAction<T>(operationParameters, action, gradleProperties);
         return executer.execute(configuringAction, operationParameters);
     }
 
-    private GradleLauncherActionExecuter<ProviderOperationParameters> createExecuter(ProviderOperationParameters operationParameters) {
+    private BuildActionExecuter<ProviderOperationParameters> createExecuter(ProviderOperationParameters operationParameters) {
         LoggingServiceRegistry loggingServices;
         DaemonParameters daemonParams = init(operationParameters, initGradleProperties(operationParameters));
-        GradleLauncherActionExecuter<BuildActionParameters> executer;
+        BuildActionExecuter<BuildActionParameters> executer;
         if (Boolean.TRUE.equals(operationParameters.isEmbedded())) {
             loggingServices = embeddedExecuterSupport.getLoggingServices();
             executer = embeddedExecuterSupport.getExecuter();
@@ -156,7 +156,7 @@ public class DefaultConnection implements InternalConnection, BuildActionRunner,
             executer = clientServices.get(DaemonClient.class);
         }
         Factory<LoggingManagerInternal> loggingManagerFactory = loggingServices.getFactory(LoggingManagerInternal.class);
-        return new LoggingBridgingGradleLauncherActionExecuter(new DaemonGradleLauncherActionExecuter(executer, daemonParams), loggingManagerFactory);
+        return new LoggingBridgingBuildActionExecuter(new DaemonBuildActionExecuter(executer, daemonParams), loggingManagerFactory);
     }
 
     private DaemonParameters init(ProviderOperationParameters operationParameters, GradleProperties gradleProperties) {
