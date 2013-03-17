@@ -16,56 +16,45 @@
 
 package org.gradle.tooling.internal.consumer.versioning;
 
-import org.gradle.util.GradleVersion;
-
 /**
  * by Szczepan Faber, created at: 1/13/12
  */
-public class VersionDetails {
-
-    private final GradleVersion gradleVersion;
-    private static final GradleVersion M5 = GradleVersion.version("1.0-milestone-5");
-    private static final GradleVersion M6 = GradleVersion.version("1.0-milestone-6");
-    private static final GradleVersion M7 = GradleVersion.version("1.0-milestone-7");
-    private static final GradleVersion V1_1 = GradleVersion.version("1.1");
+public abstract class VersionDetails {
+    private final String providerVersion;
 
     public VersionDetails(String version) {
-        gradleVersion = GradleVersion.version(version);
+        providerVersion = version;
     }
 
     public String getVersion() {
-        return gradleVersion.getVersion();
+        return providerVersion;
     }
 
-    public boolean supportsCompleteBuildEnvironment() {
-        return gradleVersion.compareTo(M7) > 0;
-    }
-
-    public boolean clientHangsOnEarlyDaemonFailure() {
-        return gradleVersion.equals(M5) || gradleVersion.equals(M6);
-    }
-
-    public boolean isPostM6Model(Class<?> internalModelType) {
-        return !ModelMapping.getModelsUpToM6().containsValue(internalModelType) && internalModelType != Void.class;
+    /**
+     * Returns true if this provider may support the given protocol model type. Returns false if it is known that the
+     * provider does not support the given model type and should not be asked to provide it.
+     */
+    public boolean isModelSupported(Class<?> protocolModelType) {
+        return false;
     }
 
     public boolean supportsConfiguringJavaHome() {
-        return gradleVersion.compareTo(M7) > 0;
+        return false;
     }
 
     public boolean supportsConfiguringJvmArguments() {
-        return gradleVersion.compareTo(M7) > 0;
+        return false;
     }
 
     public boolean supportsConfiguringStandardInput() {
-        return gradleVersion.compareTo(M7) > 0;
+        return false;
     }
 
     public boolean supportsRunningTasksWhenBuildingModel() {
-        return gradleVersion.compareTo(V1_1) > 0;
+        return false;
     }
 
     public boolean supportsGradleProjectModel() {
-        return gradleVersion.compareTo(M5) >= 0;
+        return false;
     }
 }

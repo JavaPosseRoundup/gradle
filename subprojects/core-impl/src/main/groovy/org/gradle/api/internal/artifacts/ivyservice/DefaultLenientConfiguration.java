@@ -16,8 +16,8 @@
 package org.gradle.api.internal.artifacts.ivyservice;
 
 import org.gradle.api.artifacts.*;
-import org.gradle.api.internal.CachingDirectedGraphWalker;
-import org.gradle.api.internal.DirectedGraphWithEdgeValues;
+import org.gradle.internal.graph.CachingDirectedGraphWalker;
+import org.gradle.internal.graph.DirectedGraphWithEdgeValues;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.ArtifactResolveException;
 import org.gradle.api.specs.Spec;
 import org.gradle.util.CollectionUtils;
@@ -155,8 +155,8 @@ public class DefaultLenientConfiguration implements ResolvedConfigurationBuilder
     }
 
     private static class ResolvedDependencyArtifactsGraph implements DirectedGraphWithEdgeValues<ResolvedDependency, ResolvedArtifact> {
-        public void getNodeValues(ResolvedDependency node, Collection<ResolvedArtifact> values,
-                                  Collection<ResolvedDependency> connectedNodes) {
+        public void getNodeValues(ResolvedDependency node, Collection<? super ResolvedArtifact> values,
+                                  Collection<? super ResolvedDependency> connectedNodes) {
             connectedNodes.addAll(node.getChildren());
         }
 

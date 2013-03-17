@@ -18,8 +18,8 @@ package org.gradle.tooling.internal.consumer
 import org.gradle.tooling.GradleConnectionException
 import org.gradle.tooling.ResultHandler
 import org.gradle.tooling.internal.consumer.async.AsyncConnection
-import org.gradle.tooling.internal.consumer.protocoladapter.ConsumerPropertyHandler
-import org.gradle.tooling.internal.consumer.protocoladapter.ProtocolToModelAdapter
+import org.gradle.tooling.internal.consumer.converters.ConsumerPropertyHandler
+import org.gradle.tooling.internal.adapter.ProtocolToModelAdapter
 import org.gradle.tooling.internal.protocol.ProjectVersion3
 import org.gradle.tooling.internal.protocol.ResultHandlerVersion1
 import org.gradle.tooling.model.GradleProject
@@ -30,7 +30,7 @@ class DefaultModelBuilderTest extends ConcurrentSpecification {
     final AsyncConnection protocolConnection = Mock()
     final ProtocolToModelAdapter adapter = Mock()
     final ConnectionParameters parameters = Mock()
-    final DefaultModelBuilder<GradleProject, ProjectVersion3> builder = new DefaultModelBuilder<GradleProject, ProjectVersion3>(GradleProject, ProjectVersion3, protocolConnection, adapter, parameters)
+    final DefaultModelBuilder<GradleProject> builder = new DefaultModelBuilder<GradleProject>(GradleProject, ProjectVersion3, protocolConnection, adapter, parameters)
 
     def getModelDelegatesToProtocolConnectionToFetchModel() {
         ResultHandlerVersion1<ProjectVersion3> adaptedHandler

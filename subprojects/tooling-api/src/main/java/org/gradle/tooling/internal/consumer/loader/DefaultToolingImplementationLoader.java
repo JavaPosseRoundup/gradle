@@ -24,11 +24,14 @@ import org.gradle.tooling.UnsupportedVersionException;
 import org.gradle.tooling.internal.consumer.Distribution;
 import org.gradle.tooling.internal.consumer.connection.*;
 import org.gradle.tooling.internal.consumer.parameters.ConsumerConnectionParameters;
+import org.gradle.tooling.internal.consumer.versioning.ProviderMetaDataRegistry;
+import org.gradle.tooling.internal.consumer.versioning.VersionDetails;
 import org.gradle.tooling.internal.protocol.BuildActionRunner;
 import org.gradle.tooling.internal.protocol.ConnectionVersion4;
 import org.gradle.tooling.internal.protocol.InternalConnection;
 import org.gradle.util.FilteringClassLoader;
 import org.gradle.util.GradleVersion;
+import org.gradle.util.MultiParentClassLoader;
 import org.gradle.util.MutableURLClassLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,13 +67,14 @@ public class DefaultToolingImplementationLoader implements ToolingImplementation
             ConnectionVersion4 connection = factory.create();
 
             // Adopting the connection to a refactoring friendly type that the consumer owns
+            VersionDetails providerMetaData = new ProviderMetaDataRegistry().getVersionDetails(connection.getMetaData().getVersion());
             AbstractConsumerConnection adaptedConnection;
             if (connection instanceof BuildActionRunner) {
-                adaptedConnection = new BuildActionRunnerBackedConsumerConnection(connection);
+                adaptedConnection = new BuildActionRunnerBackedConsumerConnection(connection, providerMetaData);
             } else if (connection instanceof InternalConnection) {
-                adaptedConnection = new InternalConnectionBackedConsumerConnection(connection);
+                adaptedConnection = new InternalConnectionBackedConsumerConnection(connection, providerMetaData);
             } else {
-                adaptedConnection = new AdaptedConnection(connection);
+                adaptedConnection = new AdaptedConnection(connection, providerMetaData);
             }
             adaptedConnection.configure(connectionParameters);
             return adaptedConnection;
@@ -84,7 +88,11 @@ public class DefaultToolingImplementationLoader implements ToolingImplementation
     private ClassLoader createImplementationClassLoader(Distribution distribution, ProgressLoggerFactory progressLoggerFactory) {
         ClassPath implementationClasspath = distribution.getToolingImplementationClasspath(progressLoggerFactory);
         LOGGER.debug("Using tooling provider classpath: {}", implementationClasspath);
-        FilteringClassLoader filteringClassLoader = new FilteringClassLoader(classLoader);
+        // On IBM JVM 5, ClassLoader.getResources() uses a combination of findResources() and getParent() and traverses the hierarchy rather than just calling getResources()
+        // Wrap our real classloader in one that hides the parent.
+        // TODO - move this into FilteringClassLoader
+        MultiParentClassLoader parentObfuscatingClassLoader = new MultiParentClassLoader(classLoader);
+        FilteringClassLoader filteringClassLoader = new FilteringClassLoader(parentObfuscatingClassLoader);
         filteringClassLoader.allowPackage("org.gradle.tooling.internal.protocol");
         return new MutableURLClassLoader(filteringClassLoader, implementationClasspath.getAsURLArray());
     }

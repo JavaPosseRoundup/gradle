@@ -18,10 +18,9 @@ package org.gradle.integtests;
 import org.gradle.integtests.fixtures.AbstractIntegrationTest;
 import org.gradle.integtests.fixtures.executer.ExecutionFailure;
 import org.gradle.test.fixtures.file.TestFile;
+import org.hamcrest.Matchers;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import static org.gradle.util.Matchers.containsLine;
 
 public class BuildScriptErrorIntegrationTest extends AbstractIntegrationTest {
     @Test
@@ -32,7 +31,7 @@ public class BuildScriptErrorIntegrationTest extends AbstractIntegrationTest {
 
         failure.assertHasFileName(String.format("Build file '%s'", buildFile));
         failure.assertHasLineNumber(2);
-        failure.assertHasDescription("A problem occurred evaluating root project 'reportsProjectEvaluationFailsWithGroovyException");
+        failure.assertThatDescription(Matchers.startsWith("A problem occurred evaluating root project"));
         failure.assertHasCause("Could not find method createTakk() for arguments [do-stuff] on root project 'reportsProjectEvaluationFailsWithGroovyException");
     }
 
@@ -47,7 +46,7 @@ public class BuildScriptErrorIntegrationTest extends AbstractIntegrationTest {
         failure.assertHasFileName(String.format("Build file '%s'", buildFile));
         failure.assertHasLineNumber(2);
         failure.assertHasDescription(String.format("Could not compile build file '%s'.", buildFile));
-        failure.assertThatCause(containsLine(String.format("build file '%s': 2: unable to resolve class org.gradle.unknown.Unknown", buildFile)));
+        failure.assertThatCause(Matchers.containsString(String.format("build file '%s': 2: unable to resolve class org.gradle.unknown.Unknown", buildFile)));
     }
 
     @Test
@@ -68,7 +67,7 @@ public class BuildScriptErrorIntegrationTest extends AbstractIntegrationTest {
 
         failure.assertHasFileName(String.format("Build file '%s'", childBuildFile));
         failure.assertHasLineNumber(2);
-        failure.assertHasDescription("A problem occurred evaluating project ':child'");
+        failure.assertHasDescription("A problem occurred evaluating project ':child'.");
         failure.assertHasCause("failure");
     }
 

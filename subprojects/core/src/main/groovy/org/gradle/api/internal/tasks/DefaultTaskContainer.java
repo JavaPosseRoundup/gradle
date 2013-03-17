@@ -21,8 +21,8 @@ import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.UnknownTaskException;
-import org.gradle.api.internal.CachingDirectedGraphWalker;
-import org.gradle.api.internal.DirectedGraph;
+import org.gradle.internal.graph.CachingDirectedGraphWalker;
+import org.gradle.internal.graph.DirectedGraph;
 import org.gradle.api.internal.DynamicObject;
 import org.gradle.api.internal.NamedDomainObjectContainerConfigureDelegate;
 import org.gradle.api.internal.project.ProjectInternal;
@@ -165,7 +165,7 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
 
     public void actualize() {
         new CachingDirectedGraphWalker<Task, Void>(new DirectedGraph<Task, Void>() {
-            public void getNodeValues(Task node, Collection<Void> values, Collection<Task> connectedNodes) {
+            public void getNodeValues(Task node, Collection<? super Void> values, Collection<? super Task> connectedNodes) {
                 connectedNodes.addAll(node.getTaskDependencies().getDependencies(node));
             }
         }).add(this).findValues();
